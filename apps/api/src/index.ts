@@ -24,9 +24,14 @@ export const prisma = new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['query', 'warn', 'error'] : ['warn', 'error'],
 });
 
-export const redis = new Redis(process.env.REDIS_URL!, {
-  maxRetriesPerRequest: 3,
+export const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+  maxRetriesPerRequest: 1,
   lazyConnect: true,
+  enableOfflineQueue: false,
+});
+
+redis.on('error', () => {
+  // Redis optional in dev — queues won't work but API runs fine
 });
 
 // ── BUILD SERVER ──────────────────────────────────────────────────────────────
@@ -100,7 +105,8 @@ export async function buildServer() {
 
 async function start() {
   try {
-    await redis.connect();
+    // Redis is optional — connect if available, skip if not
+    try { await redis.connect(); } catch { console.warn('Redis unavailable - queue features disabled'); }
     const app = await buildServer();
     const port = parseInt(process.env.API_PORT || '3001', 10);
     await app.listen({ port, host: '0.0.0.0' });
